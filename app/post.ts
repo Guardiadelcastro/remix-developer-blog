@@ -4,19 +4,18 @@ import parseFrontMatter from 'front-matter'
 import invariant from 'tiny-invariant'
 import { marked } from 'marked'
 
-export type Post = {
-  slug: string
-  title: string
-}
-
 export type PostMarkdownAttributes = {
   title: string
 }
 
-export type NewPost = {
+export type Post = {
   title: string
   slug: string
   markdown: string
+}
+
+export type ParsedPost = Pick<Post, 'title' | 'slug'> & {
+  html: string
 }
 
 // relative to the server output not the source!
@@ -46,8 +45,7 @@ export async function getPosts() {
   )
 }
 
-// ...
-export async function getPost(slug: string) {
+export async function getPost(slug: string): Promise<ParsedPost> {
   let filepath = path.join(postsPath, slug + '.md')
   let file = await fs.readFile(filepath)
   let { attributes, body } = parseFrontMatter(file.toString())
@@ -59,7 +57,28 @@ export async function getPost(slug: string) {
   return { slug, html, title: attributes.title }
 }
 
-export async function createPost(post: NewPost) {
+export async function getRawPost(slug: string): Promise<Post> {
+  let filepath = path.join(postsPath, slug + '.md')
+  let file = await fs.readFile(filepath)
+  let { attributes, body } = parseFrontMatter(file.toString())
+  invariant(
+    isValidPostAttributes(attributes),
+    `Post ${filepath} is missing attributes`
+  )
+  return { slug, markdown: body, title: attributes.title }
+}
+
+export async function createPost(post: Post) {
+  let md = `---\ntitle: ${post.title}\n---\n\n${post.markdown}`
+  await fs.writeFile(path.join(postsPath, post.slug + '.md'), md)
+  return getPost(post.slug)
+}
+
+export async function updatePost(post: Post & { oldSlug: string }) {
+  //if the slug has changed, delete the old one
+  if (post.slug !== post.oldSlug) {
+    await fs.unlink(path.join(postsPath, post.oldSlug + '.md'))
+  }
   let md = `---\ntitle: ${post.title}\n---\n\n${post.markdown}`
   await fs.writeFile(path.join(postsPath, post.slug + '.md'), md)
   return getPost(post.slug)
